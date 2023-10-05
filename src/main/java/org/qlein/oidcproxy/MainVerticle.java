@@ -35,11 +35,12 @@ import java.util.Map.Entry;
 public class MainVerticle extends AbstractVerticle {
 
   public static final String BEARER_PREFIX = "Bearer ";
-  public static final String HEADER_PREFIX = "X-auth-";
+  public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
   public static final String OIDC_PROXY_BACKEND_PORT = "OIDC_PROXY_BACKEND_PORT";
   public static final String OIDC_PROXY_BACKEND_HOST = "OIDC_PROXY_BACKEND_HOST";
   public static final String OIDC_PROXY_PORT = "OIDC_PROXY_PORT";
   public static final String OIDC_PROXY_REALM_URL = "OIDC_PROXY_REALM_URL";
+  public static final String OIDC_PROXY_HEADER_PREFIX = "OIDC_PROXY_HEADER_PREFIX";
   private static final String[] REQUIRED_ENV_VARS = new String[]{
       OIDC_PROXY_BACKEND_HOST,
       OIDC_PROXY_BACKEND_PORT,
@@ -51,6 +52,7 @@ public class MainVerticle extends AbstractVerticle {
   private DefaultJWTProcessor<SecurityContext> jwtProcessor;
   private int proxyPort;
   private String realmUrl;
+  private String headerPrefix;
   private int backendPort;
   private String backendHost;
   private ConfigRetriever myConfigRetriver;
@@ -128,6 +130,7 @@ public class MainVerticle extends AbstractVerticle {
     realmUrl = asyncResults.getString(OIDC_PROXY_REALM_URL);
     backendPort = asyncResults.getInteger(OIDC_PROXY_BACKEND_PORT);
     backendHost = asyncResults.getString(OIDC_PROXY_BACKEND_HOST);
+    headerPrefix = asyncResults.getString(OIDC_PROXY_HEADER_PREFIX, DEFAULT_HEADER_PREFIX);
 
     return true;
   }
@@ -157,7 +160,7 @@ public class MainVerticle extends AbstractVerticle {
               System.out.println("Claims: " + claimsSet.toJSONObject());
               for (Entry<String, Object> claim : claimsSet.getClaims().entrySet()) {
                 req.headers()
-                    .add(HEADER_PREFIX + claim.getKey(), claimValueToString(claim.getValue()));
+                    .add(headerPrefix + claim.getKey(), claimValueToString(claim.getValue()));
               }
               proxy.handle(req);
             } catch (Exception e) {
