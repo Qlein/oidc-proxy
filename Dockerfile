@@ -1,7 +1,7 @@
 FROM maven:3.9.0-eclipse-temurin-19-focal as build
 
-COPY oidc-reverse-proxy/src /home/app/src
-COPY oidc-reverse-proxy/pom.xml /home/app
+COPY src /home/app/src
+COPY pom.xml /home/app
 RUN mvn -f /home/app/pom.xml clean package
 
 
