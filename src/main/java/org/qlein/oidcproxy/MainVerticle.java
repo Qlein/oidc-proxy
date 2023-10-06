@@ -26,6 +26,8 @@ import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
 import java.util.HashSet;
@@ -33,6 +35,8 @@ import java.util.List;
 import java.util.Map.Entry;
 
 public class MainVerticle extends AbstractVerticle {
+
+  private final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
 
   public static final String BEARER_PREFIX = "Bearer ";
   public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
@@ -99,10 +103,26 @@ public class MainVerticle extends AbstractVerticle {
                 return;
               }
 
-              try {
-                initTokenProcessor();
-              } catch (Throwable e) {
-                startPromise.fail(e);
+              boolean tokenProcessorInitialized = false;
+              int tokenProcessorInitCounter = 0;
+              
+              while (tokenProcessorInitCounter < 10 && !tokenProcessorInitialized) {
+                tokenProcessorInitCounter++;
+                try {
+                  initTokenProcessor();
+                  tokenProcessorInitialized = true;
+                } catch (Throwable e) {
+                  int sleepDuration = tokenProcessorInitCounter * 2;
+                  LOGGER.error(
+                      "Token processor init failed with cause [{}], sleeping {}s before retry",
+                      e.getMessage(),
+                      sleepDuration
+                  );
+                  sleep(sleepDuration);
+                }
+              }
+              if (!tokenProcessorInitialized) {
+                startPromise.fail("Token processor initialization failed mutiple times");
                 return;
               }
 
@@ -114,18 +134,26 @@ public class MainVerticle extends AbstractVerticle {
         );
   }
 
+  private void sleep(int seconds) {
+    try {
+      Thread.sleep(seconds * 1000l);
+    } catch (Throwable e) {
+    }
+  }
+
   private boolean loadConfigValues(JsonObject asyncResults) {
     boolean configIsValid = true;
     for (String requiredEnvVar : REQUIRED_ENV_VARS) {
       if (!asyncResults.containsKey(requiredEnvVar)) {
         configIsValid = false;
-        System.out.println("Missing env variable: " + requiredEnvVar);
+        LOGGER.error("Missing env variable: {}", requiredEnvVar);
       }
     }
     if (!configIsValid) {
       return false;
     }
-    System.out.printf("Loaded config values: %s%n", asyncResults.encodePrettily());
+    LOGGER.info("Loaded config values: {}", asyncResults.encodePrettily());
+
     proxyPort = asyncResults.getInteger(OIDC_PROXY_PORT);
     realmUrl = asyncResults.getString(OIDC_PROXY_REALM_URL);
     backendPort = asyncResults.getInteger(OIDC_PROXY_BACKEND_PORT);
@@ -154,10 +182,10 @@ public class MainVerticle extends AbstractVerticle {
             sendUnauthorized(response, "Bearer missing");
           } else {
             accessToken = accessToken.substring(BEARER_PREFIX.length());
-            System.out.println("Token: " + accessToken);
+            LOGGER.trace("Token: {}", accessToken);
             try {
               JWTClaimsSet claimsSet = jwtProcessor.process(accessToken, (SecurityContext) null);
-              System.out.println("Claims: " + claimsSet.toJSONObject());
+              LOGGER.trace("Claims: {}", claimsSet.toJSONObject());
               for (Entry<String, Object> claim : claimsSet.getClaims().entrySet()) {
                 req.headers()
                     .add(headerPrefix + claim.getKey(), claimValueToString(claim.getValue()));
@@ -172,7 +200,7 @@ public class MainVerticle extends AbstractVerticle {
         .listen(8080, http -> {
               if (http.succeeded()) {
                 startPromise.complete();
-                System.out.println("HTTP server started on port " + proxyPort);
+                LOGGER.info("HTTP server started on port {}", proxyPort);
               } else {
                 startPromise.fail(http.cause());
               }
@@ -181,7 +209,7 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   private void sendUnauthorized(HttpServerResponse response, String error) {
-    System.err.print(error);
+    LOGGER.error("Authorization error: {}", error);
     response.setStatusCode(401).send("Unauthorized: " + error);
   }
 
@@ -189,21 +217,21 @@ public class MainVerticle extends AbstractVerticle {
     // The OpenID provider issuer URL
     Issuer issuer = new Issuer(realmUrl);
 
-// Will resolve the OpenID provider metadata automatically
+    // Will resolve the OpenID provider metadata automatically
     OIDCProviderMetadata opMetadata = OIDCProviderMetadata.resolve(issuer);
 
-// Print the metadata
-    System.out.println(opMetadata.toJSONObject());
+    // Print the metadata
+    LOGGER.debug("OIDC provider meta data: {}", opMetadata.toJSONObject());
 
-    jwtProcessor =
-        new DefaultJWTProcessor<>();
+    jwtProcessor = new DefaultJWTProcessor<>();
 
-    jwtProcessor.setJWSTypeVerifier(
-        new DefaultJOSEObjectTypeVerifier<>(JOSEObjectType.JWT));
+    jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(JOSEObjectType.JWT));
     JWKSource<SecurityContext> keySource = new RemoteJWKSet<>(opMetadata.getJWKSetURI().toURL());
 
-    JWSKeySelector<SecurityContext> keySelector =
-        new JWSVerificationKeySelector<>(new HashSet<>(opMetadata.getIDTokenJWSAlgs()), keySource);
+    JWSKeySelector<SecurityContext> keySelector = new JWSVerificationKeySelector<>(
+        new HashSet<>(opMetadata.getIDTokenJWSAlgs()),
+        keySource
+    );
 
     jwtProcessor.setJWSKeySelector(keySelector);
 
