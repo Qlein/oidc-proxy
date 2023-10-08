@@ -29,7 +29,6 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
-import io.vertx.httpproxy.ProxyOptions;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;

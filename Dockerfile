@@ -17,4 +17,4 @@ COPY --from=build /home/app/target/*-fat.jar /app/application.jar
 
 ENV JAVA_OPTS "-Xmx8m"
 
-ENTRYPOINT java $JAVA_OPTS -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.Log4j2LogDelegateFactory -Djava.security.egd=file:/dev/./urandom -jar /app/application.jar
+ENTRYPOINT java $JAVA_OPTS -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory -Djava.security.egd=file:/dev/./urandom -jar /app/application.jar
