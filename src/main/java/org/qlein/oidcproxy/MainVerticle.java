@@ -29,6 +29,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
+import io.vertx.httpproxy.ProxyOptions;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
@@ -197,7 +198,7 @@ public class MainVerticle extends AbstractVerticle {
           }
 
         })
-        .listen(8080, http -> {
+        .listen(proxyPort, http -> {
               if (http.succeeded()) {
                 startPromise.complete();
                 LOGGER.info("HTTP server started on port {}", proxyPort);
