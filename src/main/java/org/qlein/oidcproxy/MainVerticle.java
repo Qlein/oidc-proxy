@@ -36,6 +36,7 @@ import java.util.Map.Entry;
 
 public class MainVerticle extends AbstractVerticle {
 
+  protected static final int SLEEP_DURATION = 1900;
   private final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
 
   public static final String BEARER_PREFIX = "Bearer ";
@@ -77,6 +78,7 @@ public class MainVerticle extends AbstractVerticle {
                         .add(OIDC_PROXY_BACKEND_HOST)
                         .add(OIDC_PROXY_PORT)
                         .add(OIDC_PROXY_REALM_URL)
+                        .add(OIDC_PROXY_HEADER_PREFIX)
                 )
         );
     ConfigRetrieverOptions myOptions = new ConfigRetrieverOptions().addStore(jsonEnvConfig);
@@ -112,13 +114,12 @@ public class MainVerticle extends AbstractVerticle {
                   initTokenProcessor();
                   tokenProcessorInitialized = true;
                 } catch (Throwable e) {
-                  int sleepDuration = tokenProcessorInitCounter * 2;
                   LOGGER.error(
                       "Token processor init failed with cause [{}], sleeping {}s before retry",
                       e.getMessage(),
-                      sleepDuration
+                      SLEEP_DURATION
                   );
-                  sleep(sleepDuration);
+                  sleep(1900);
                 }
               }
               if (!tokenProcessorInitialized) {
@@ -134,9 +135,9 @@ public class MainVerticle extends AbstractVerticle {
         );
   }
 
-  private void sleep(int seconds) {
+  private void sleep(int millis) {
     try {
-      Thread.sleep(seconds * 1000l);
+      Thread.sleep(millis);
     } catch (Throwable e) {
     }
   }
