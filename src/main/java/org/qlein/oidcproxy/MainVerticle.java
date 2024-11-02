@@ -62,11 +62,9 @@ public class MainVerticle extends AbstractVerticle {
   public static final String BEARER_PREFIX = "Bearer ";
   public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
   public static final int DEFAULT_PROXY_PORT = 8080;
-  public static final String OIDC_PROXY_HEADER_PREFIX = "OIDC_PROXY_HEADER_PREFIX";
   public static final String OIDC_PROXY_PORT = "OIDC_PROXY_PORT";
 
   private int proxyPort;
-  private String headerPrefix;
 
   private ConfigRetriever myConfigRetriver;
   private HttpClient client;
@@ -102,7 +100,7 @@ public class MainVerticle extends AbstractVerticle {
                 .put(
                     "keys",
                     new JsonArray()
-                        .add(OIDC_PROXY_HEADER_PREFIX)
+                        .add(OIDC_PROXY_PORT)
                 )
         );
     ConfigRetrieverOptions myOptions = new ConfigRetrieverOptions().addStore(jsonEnvConfig);
@@ -189,7 +187,6 @@ public class MainVerticle extends AbstractVerticle {
 
   private boolean loadConfigValues(JsonObject asyncResults) {
     LOGGER.info("Loaded config values: {}", asyncResults.encodePrettily());
-    headerPrefix = asyncResults.getString(OIDC_PROXY_HEADER_PREFIX, DEFAULT_HEADER_PREFIX);
     proxyPort = asyncResults.getInteger(OIDC_PROXY_PORT, DEFAULT_PROXY_PORT);
     return true;
   }
@@ -290,7 +287,13 @@ public class MainVerticle extends AbstractVerticle {
       for (Entry<String, Object> claim : claimsSet.getClaims().entrySet()) {
         req
             .headers()
-            .add(headerPrefix + claim.getKey(), claimValueToString(claim.getValue()));
+            .add(
+                Optional
+                    .ofNullable(backend.getHeaderPrefix())
+                    .orElse(DEFAULT_HEADER_PREFIX)
+                    + claim.getKey(),
+                claimValueToString(claim.getValue()
+                ));
       }
       LOGGER.debug("Sending request to reverse proxy");
       backend.getProxy().handle(req);

@@ -11,6 +11,7 @@ import java.util.Objects;
 public class BackendConfig {
 
   private String realmUrl;
+  private String headerPrefix;
   private String pathPrefix;
   private String backendHost;
   private int backendPort;
@@ -140,5 +141,14 @@ public class BackendConfig {
     return realmUrl.equals(backendConfig.getRealmUrl()) &&
         this.backendHost.equals(backendConfig.getBackendHost()) &&
         this.backendPort == backendConfig.getBackendPort();
+  }
+
+  public String getHeaderPrefix() {
+    return headerPrefix;
+  }
+
+  public BackendConfig setHeaderPrefix(String headerPrefix) {
+    this.headerPrefix = headerPrefix;
+    return this;
   }
 }
