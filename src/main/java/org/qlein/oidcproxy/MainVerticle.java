@@ -142,7 +142,7 @@ public class MainVerticle extends AbstractVerticle {
 
   private void loadBackends(Long aLong) {
     LOGGER.debug("Loading config maps");
-    Set<String> foundTenants = kubernetesClient
+    Set<String> foundBackends = kubernetesClient
         .configMaps()
         .list()
         .getItems()
@@ -153,7 +153,7 @@ public class MainVerticle extends AbstractVerticle {
 
     backendConfigs
         .stream()
-        .filter(backendConfig -> !foundTenants.contains(backendConfig.getTenantId()))
+        .filter(backendConfig -> !foundBackends.contains(backendConfig.getBackendId()))
         .collect(Collectors.toSet())
         .forEach(this::removeBackend);
   }
@@ -170,7 +170,7 @@ public class MainVerticle extends AbstractVerticle {
         addOrUpdateBackend(
             jsonMapper
                 .readValue(configJsonEntry.getValue(), BackendConfig.class)
-                .setTenantId(tenantId)
+                .setBackendId(tenantId)
                 .setConfigMapField(configJsonEntry.getKey())
         );
       } catch (JsonProcessingException e) {
@@ -332,7 +332,7 @@ public class MainVerticle extends AbstractVerticle {
     Optional<BackendConfig> optionalExistingConfig = backendConfigs
         .stream()
         .filter(
-            existingConfig -> existingConfig.getTenantId().equals(backendConfig.getTenantId()) &&
+            existingConfig -> existingConfig.getBackendId().equals(backendConfig.getBackendId()) &&
                 existingConfig.getConfigMapField().equals(backendConfig.getConfigMapField()))
         .findFirst();
 

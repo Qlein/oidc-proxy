@@ -18,7 +18,7 @@ public class BackendConfig {
   private List<ClaimFilter> claimFilter;
 
   @JsonIgnore
-  private String tenantId;
+  private String backendId;
   @JsonIgnore
   private HttpProxy proxy;
   @JsonIgnore
@@ -35,12 +35,12 @@ public class BackendConfig {
     return this;
   }
 
-  public String getTenantId() {
-    return tenantId;
+  public String getBackendId() {
+    return backendId;
   }
 
-  public BackendConfig setTenantId(String tenantId) {
-    this.tenantId = tenantId;
+  public BackendConfig setBackendId(String backendId) {
+    this.backendId = backendId;
     return this;
   }
 
@@ -127,13 +127,13 @@ public class BackendConfig {
       return false;
     }
     BackendConfig that = (BackendConfig) o;
-    return Objects.equals(tenantId, that.tenantId) && Objects.equals(
+    return Objects.equals(backendId, that.backendId) && Objects.equals(
         configMapField, that.configMapField);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(tenantId, configMapField);
+    return Objects.hash(backendId, configMapField);
   }
 
   public boolean sameRealmAndBackend(BackendConfig backendConfig) {
