@@ -1,4 +1,4 @@
-FROM maven:3.9.5-eclipse-temurin-21 as build
+FROM maven:3.9.9-eclipse-temurin-21-jammy  as build
 
 RUN mkdir /home/app/
 
@@ -9,7 +9,7 @@ COPY src /home/app/src
 RUN mvn -f /home/app/pom.xml clean package
 
 
-FROM eclipse-temurin:21.0.1_12-jre-jammy
+FROM eclipse-temurin:21.0.4_7-jre-jammy
 
 RUN mkdir /app
 
