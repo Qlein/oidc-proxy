@@ -23,12 +23,12 @@ class BackendConfigTest {
             .setBackendPort(8080)
             .setRealmUrl("https://account.localhost/auth/realms/realmname")
             .setClaimFilter(List.of(
-                ClaimFilterType.contains.get("group", "admin")
+                ClaimFilterType.string_contains.get("group", "admin")
             ))
     );
     assertEquals(
         """
-            {"realmUrl":"https://account.localhost/auth/realms/realmname","headerPrefix":null,"pathPrefix":"/api/admin","backendHost":"localhost","backendPort":8080,"headerFilter":{"Host":"api.localhost"},"claimFilter":[{"key":"group","value":"admin","type":"contains"}]}""",
+            {"realmUrl":"https://account.localhost/auth/realms/realmname","headerPrefix":null,"pathPrefix":"/api/admin","backendHost":"localhost","backendPort":8080,"headerFilter":{"Host":"api.localhost"},"claimFilter":[{"key":"group","value":"admin","type":"string_contains"}]}""",
         json
     );
   }

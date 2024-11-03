@@ -37,7 +37,6 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
-import java.text.ParseException;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -51,9 +50,9 @@ import java.util.stream.Collectors;
 public class MainVerticle extends AbstractVerticle {
 
   protected static final int SLEEP_DURATION = 1900;
-  protected static final String LABEL_TENANT_ID = "tenantId";
+  protected static final String LABEL_BACKEND_ID = "backendId";
   private static final String LABEL_TYPE = "type";
-  private static final String CONFIG_MAP_TYPE_OIDC = "tenantOidc";
+  private static final String CONFIG_MAP_TYPE_OIDC = "backendOidc";
   protected static final Comparator<BackendConfig> BACKEND_CONFIG_COMPARATOR =
       (config1, config2) ->
           -config1.getPathPrefix().compareTo(config2.getPathPrefix());
@@ -76,15 +75,15 @@ public class MainVerticle extends AbstractVerticle {
 
   private boolean checkConfigMapLabels(ConfigMap configMap) {
     Map<String, String> labels = configMap.getMetadata().getLabels();
-    String tenantId = labels.get(LABEL_TENANT_ID);
+    String backendId = labels.get(LABEL_BACKEND_ID);
     String type = labels.get(LABEL_TYPE);
     LOGGER.trace(
-        "Checking config map {}, tenant label: {}, type label: {}",
+        "Checking config map {}, backend label: {}, type label: {}",
         configMap.getMetadata().getName(),
-        tenantId,
+        backendId,
         type
     );
-    return tenantId != null && CONFIG_MAP_TYPE_OIDC.equals(type);
+    return backendId != null && CONFIG_MAP_TYPE_OIDC.equals(type);
   }
 
   @Override
@@ -139,7 +138,7 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   private void loadBackends(Long aLong) {
-    LOGGER.debug("Loading config maps");
+    LOGGER.trace("Loading config maps");
     Set<String> foundBackends = kubernetesClient
         .configMaps()
         .list()
@@ -157,18 +156,22 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   private void removeBackend(BackendConfig backendConfig) {
-    //TODO find out how to destroy jwt processor and http proxy objects
+    LOGGER.info(
+        "Removing backend [{}:{}]",
+        backendConfig.getBackendId(),
+        backendConfig.getPathPrefix()
+    );
     backendConfigs.remove(backendConfig);
   }
 
   private String addConfigMap(ConfigMap configMap) {
-    String tenantId = configMap.getMetadata().getLabels().get(LABEL_TENANT_ID);
+    String backendId = configMap.getMetadata().getLabels().get(LABEL_BACKEND_ID);
     for (Entry<String, String> configJsonEntry : configMap.getData().entrySet()) {
       try {
         addOrUpdateBackend(
             jsonMapper
                 .readValue(configJsonEntry.getValue(), BackendConfig.class)
-                .setBackendId(tenantId)
+                .setBackendId(backendId)
                 .setConfigMapField(configJsonEntry.getKey())
         );
       } catch (JsonProcessingException e) {
@@ -181,7 +184,7 @@ public class MainVerticle extends AbstractVerticle {
         );
       }
     }
-    return tenantId;
+    return backendId;
   }
 
 
@@ -200,9 +203,9 @@ public class MainVerticle extends AbstractVerticle {
           String authorizationHeaderValue = req.getHeader(HttpHeaders.AUTHORIZATION);
 
           if (authorizationHeaderValue == null) {
-            sendUnauthorized(response, "Auth header missing");
+            RequestProcessor.sendUnauthorized(response, "Auth header missing");
           } else if (!authorizationHeaderValue.startsWith(BEARER_PREFIX)) {
-            sendUnauthorized(response, "Bearer missing");
+            RequestProcessor.sendUnauthorized(response, "Bearer missing");
           } else {
             final String accessToken = authorizationHeaderValue.substring(BEARER_PREFIX.length());
             if (LOGGER.isTraceEnabled()) {
@@ -214,7 +217,7 @@ public class MainVerticle extends AbstractVerticle {
                 .sorted(BACKEND_CONFIG_COMPARATOR)
                 .toList();
             if (matchingBackends.isEmpty()) {
-              sendUnauthorized(response, "Unknown instance");
+              RequestProcessor.sendUnauthorized(response, "Unknown instance");
               return;
             }
             BackendConfig backendConfig = matchingBackends.get(0);
@@ -222,7 +225,7 @@ public class MainVerticle extends AbstractVerticle {
                 "Backend config with path prefix [{}] will be used to process request",
                 backendConfig.getPathPrefix()
             );
-            processRequestWithBackend(accessToken, req, response, backendConfig);
+            RequestProcessor.processRequestWithBackend(accessToken, req, response, backendConfig);
           }
 
         })
@@ -266,72 +269,8 @@ public class MainVerticle extends AbstractVerticle {
     return pathMatches && headersMatch;
   }
 
-  private void processRequestWithBackend(
-      String accessToken,
-      HttpServerRequest req,
-      HttpServerResponse response,
-      BackendConfig backend
-  ) {
-    try {
-      JWTClaimsSet claimsSet = backend
-          .getJwtProcessor()
-          .process(accessToken, (SecurityContext) null);
-      if (LOGGER.isTraceEnabled()) {
-        LOGGER.trace("Claims: {}", claimsSet.toJSONObject());
-      }
-
-      if (!matchClaims(claimsSet, backend.getClaimFilter())) {
-        sendUnauthorized(response, "Claims do not match");
-      }
-
-      for (Entry<String, Object> claim : claimsSet.getClaims().entrySet()) {
-        req
-            .headers()
-            .add(
-                Optional
-                    .ofNullable(backend.getHeaderPrefix())
-                    .orElse(DEFAULT_HEADER_PREFIX)
-                    + claim.getKey(),
-                claimValueToString(claim.getValue()
-                ));
-      }
-      LOGGER.debug("Sending request to reverse proxy");
-      backend.getProxy().handle(req);
-
-    } catch (Exception e) {
-      sendUnauthorized(response, e.getMessage());
-    }
-  }
-
-  private boolean matchClaims(JWTClaimsSet claimsSet, List<ClaimFilter> claimFilters) {
-    if (claimFilters == null || claimFilters.isEmpty()) {
-      return true;
-    }
-    if (claimsSet == null || claimFilters.isEmpty()) {
-      return false;
-    }
-    for (ClaimFilter claimFilter : claimFilters) {
-      try {
-        String claimValue = claimsSet.getStringClaim(claimFilter.getKey());
-        String filterValue = claimFilter.getValue();
-        if (!claimFilter.getType().matches(claimValue, filterValue)) {
-          return false;
-        }
-      } catch (ParseException e) {
-        LOGGER.error(
-            "Claim [{}] parsing failed, cause: {} - {}",
-            claimFilter.getKey(),
-            e.getClass().getSimpleName(),
-            e.getMessage(),
-            e
-        );
-      }
-      return false;
-    }
-    return true;
-  }
-
   public void addOrUpdateBackend(BackendConfig backendConfig) {
+
     Optional<BackendConfig> optionalExistingConfig = backendConfigs
         .stream()
         .filter(
@@ -344,6 +283,23 @@ public class MainVerticle extends AbstractVerticle {
         .orElse(true);
 
     if (initRequired) {
+      if (optionalExistingConfig.isEmpty()) {
+        LOGGER.info(
+            "Adding backend [{}:{}] => {}:{}",
+            backendConfig.getBackendId(),
+            backendConfig.getPathPrefix(),
+            backendConfig.getBackendHost(),
+            backendConfig.getBackendPort()
+        );
+      } else {
+        LOGGER.info(
+            "Reinitializing backend [{}:{}] => {}:{}",
+            backendConfig.getBackendId(),
+            backendConfig.getPathPrefix(),
+            backendConfig.getBackendHost(),
+            backendConfig.getBackendPort()
+        );
+      }
       try {
         initTokenProcessor(backendConfig);
       } catch (Throwable e) {
@@ -362,6 +318,14 @@ public class MainVerticle extends AbstractVerticle {
       optionalExistingConfig.ifPresent(backendConfigs::remove);
       backendConfigs.add(backendConfig);
     } else {
+      LOGGER.trace(
+          "Updating backend [{}:{}] => {}:{}",
+          backendConfig.getBackendId(),
+          backendConfig.getPathPrefix(),
+          backendConfig.getBackendHost(),
+          backendConfig.getBackendPort()
+      );
+
       //if a config already exists and realm and backend values are the same, then just replace filters
       optionalExistingConfig
           .get()
@@ -371,6 +335,11 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   private void initHttpProxy(BackendConfig backendConfig) {
+    LOGGER.info(
+        "Initializing proxy for backend [{}] with path prefix [{}]",
+        backendConfig.getBackendId(),
+        backendConfig.getPathPrefix()
+    );
     backendConfig.setProxy(
         HttpProxy
             .reverseProxy(client)
@@ -378,12 +347,7 @@ public class MainVerticle extends AbstractVerticle {
     );
   }
 
-  private void sendUnauthorized(HttpServerResponse response, String error) {
-    LOGGER.error("Authorization error: {}", error);
-    response.setStatusCode(401).send("Unauthorized: " + error);
-  }
-
-  private void initTokenProcessor(BackendConfig config) throws GeneralException, IOException {
+  public static void initTokenProcessor(BackendConfig config) throws GeneralException, IOException {
     // The OpenID provider issuer URL
     Issuer issuer = new Issuer(config.getRealmUrl());
 
@@ -412,7 +376,4 @@ public class MainVerticle extends AbstractVerticle {
     config.setJwtProcessor(jwtProcessor);
   }
 
-  private static String claimValueToString(Object value) {
-    return value.toString();
-  }
 }
