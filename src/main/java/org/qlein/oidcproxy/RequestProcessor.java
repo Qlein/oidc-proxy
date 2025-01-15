@@ -48,12 +48,21 @@ public class RequestProcessor {
                 claimValueToString(claim.getValue()
                 ));
       }
-      LOGGER.debug("Sending request to reverse proxy");
+      LOGGER.debug(
+          "Sending [{}] request to backend [{}:{}]",
+          req.path(),
+          backend.getBackendHost(),
+          backend.getBackendPort()
+      );
       backend.getProxy().handle(req);
 
     } catch (Exception e) {
       LOGGER.error(
-          "Processing request failed, cause: {} - {}",
+          "Processing request [{}] failed with backend [{}:{}] and realm url [{}], cause: {} - {}",
+          req.path(),
+          backend.getBackendHost(),
+          backend.getBackendPort(),
+          backend.getRealmUrl(),
           e.getClass().getName(),
           e.getMessage(),
           e);
