@@ -13,7 +13,11 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import com.nimbusds.oauth2.sdk.GeneralException;
+import com.nimbusds.oauth2.sdk.http.HTTPRequest;
+import com.nimbusds.oauth2.sdk.http.HTTPRequestConfigurator;
+import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 import com.nimbusds.oauth2.sdk.id.Issuer;
+import com.nimbusds.oauth2.sdk.util.JSONObjectUtils;
 import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -37,6 +41,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
+import java.net.URL;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +51,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.Vector;
 import java.util.stream.Collectors;
+import net.minidev.json.JSONObject;
 
 public class MainVerticle extends AbstractVerticle {
 
@@ -203,9 +209,9 @@ public class MainVerticle extends AbstractVerticle {
           String authorizationHeaderValue = req.getHeader(HttpHeaders.AUTHORIZATION);
 
           if (authorizationHeaderValue == null) {
-            RequestProcessor.sendUnauthorized(response, "Auth header missing");
+            RequestProcessor.sendUnauthorized(req, response, "Auth header missing");
           } else if (!authorizationHeaderValue.startsWith(BEARER_PREFIX)) {
-            RequestProcessor.sendUnauthorized(response, "Bearer missing");
+            RequestProcessor.sendUnauthorized(req, response, "Bearer missing");
           } else {
             final String accessToken = authorizationHeaderValue.substring(BEARER_PREFIX.length());
             if (LOGGER.isTraceEnabled()) {
@@ -217,7 +223,7 @@ public class MainVerticle extends AbstractVerticle {
                 .sorted(BACKEND_CONFIG_COMPARATOR)
                 .toList();
             if (matchingBackends.isEmpty()) {
-              RequestProcessor.sendUnauthorized(response, "Unknown instance");
+              RequestProcessor.sendUnauthorized(req, response, "Unknown instance");
               return;
             }
             BackendConfig backendConfig = matchingBackends.get(0);
@@ -347,12 +353,57 @@ public class MainVerticle extends AbstractVerticle {
     );
   }
 
-  public static void initTokenProcessor(BackendConfig config) throws GeneralException, IOException {
-    // The OpenID provider issuer URL
-    Issuer issuer = new Issuer(config.getRealmUrl());
+  public static OIDCProviderMetadata resolve(final BackendConfig backendConfig)
+      throws GeneralException, IOException {
 
+    HTTPRequestConfigurator requestConfigurator = httpRequest -> {
+      httpRequest.setConnectTimeout(20000);
+      httpRequest.setReadTimeout(20000);
+    };
+
+    Issuer issuer = new Issuer(
+        Optional
+            .ofNullable(backendConfig.getRealmInternalUrl())
+            .orElse(backendConfig.getRealmUrl())
+    );
+
+    URL configURL = OIDCProviderMetadata.resolveURL(issuer);
+
+    HTTPRequest httpRequest = new HTTPRequest(HTTPRequest.Method.GET, configURL);
+    requestConfigurator.configure(httpRequest);
+
+    HTTPResponse httpResponse = httpRequest.send();
+
+    if (httpResponse.getStatusCode() != 200) {
+      throw new IOException("Couldn't download OpenID Provider metadata from " + configURL +
+          ": Status code " + httpResponse.getStatusCode());
+    }
+
+    String responseBody = httpResponse.getBody();
+//    if (backendConfig.getRealmInternalUrl() != null) {
+//      responseBody = responseBody.replaceAll(
+//          backendConfig.getRealmUrl(),
+//          backendConfig.getRealmInternalUrl()
+//      );
+//    }
+    JSONObject jsonObject = JSONObjectUtils.parse(responseBody);
+    if (backendConfig.getRealmInternalUrl() != null) {
+      jsonObject.put(
+          "jwks_uri",
+          ((String) jsonObject.get("jwks_uri"))
+              .replaceAll(
+                  backendConfig.getRealmUrl(),
+                  backendConfig.getRealmInternalUrl()
+              )
+      );
+    }
+
+    return OIDCProviderMetadata.parse(jsonObject);
+  }
+
+  public static void initTokenProcessor(BackendConfig config) throws GeneralException, IOException {
     // Will resolve the OpenID provider metadata automatically
-    OIDCProviderMetadata opMetadata = OIDCProviderMetadata.resolve(issuer);
+    OIDCProviderMetadata opMetadata = resolve(config);
 
     // Print the metadata
     LOGGER.debug("OIDC provider meta data: {}", opMetadata.toJSONObject());
@@ -370,8 +421,9 @@ public class MainVerticle extends AbstractVerticle {
     jwtProcessor.setJWSKeySelector(keySelector);
 
     jwtProcessor.setJWTClaimsSetVerifier(new DefaultJWTClaimsVerifier(
-        new JWTClaimsSet.Builder().issuer(opMetadata.getIssuer().getValue()).build(),
-        new HashSet<>(List.of("sub", "typ", "iat"))));
+        new JWTClaimsSet.Builder().build(),
+        new HashSet<>(List.of("sub", "typ", "iat"))
+    ));
 
     config.setJwtProcessor(jwtProcessor);
   }

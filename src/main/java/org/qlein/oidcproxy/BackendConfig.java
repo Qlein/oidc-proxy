@@ -11,6 +11,7 @@ import java.util.Objects;
 public class BackendConfig {
 
   private String realmUrl;
+  private String realmInternalUrl;
   private String headerPrefix;
   private String pathPrefix;
   private String backendHost;
@@ -149,6 +150,15 @@ public class BackendConfig {
 
   public BackendConfig setHeaderPrefix(String headerPrefix) {
     this.headerPrefix = headerPrefix;
+    return this;
+  }
+
+  public String getRealmInternalUrl() {
+    return realmInternalUrl;
+  }
+
+  public BackendConfig setRealmInternalUrl(String realmInternalUrl) {
+    this.realmInternalUrl = realmInternalUrl;
     return this;
   }
 }

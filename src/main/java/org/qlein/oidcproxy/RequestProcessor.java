@@ -1,5 +1,7 @@
 package org.qlein.oidcproxy;
 
+import static java.time.LocalDateTime.now;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.nimbusds.jose.proc.SecurityContext;
@@ -8,6 +10,7 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -32,7 +35,7 @@ public class RequestProcessor {
       }
 
       if (!matchClaims(claimsSet, backend.getClaimFilter())) {
-        sendUnauthorized(response, "Claims do not match");
+        sendUnauthorized(req, response, "Claims do not match");
         return;
       }
 
@@ -66,7 +69,7 @@ public class RequestProcessor {
           e.getClass().getName(),
           e.getMessage(),
           e);
-      sendUnauthorized(response, e.getMessage());
+      sendUnauthorized(req, response, e.getMessage());
     }
   }
 
@@ -116,9 +119,16 @@ public class RequestProcessor {
     return true;
   }
 
-  static void sendUnauthorized(HttpServerResponse response, String error) {
+  static void sendUnauthorized(HttpServerRequest req, HttpServerResponse response, String error) {
     LOGGER.error("Authorization error: {}", error);
-    response.setStatusCode(401).send("Unauthorized: " + error);
+    response
+        .putHeader("Content", "application/json")
+        .setStatusCode(401)
+        .send("{"
+            + "\"message\": \"invalid token\","
+            + "\"endpoint\": \"" + req.path() + "\","
+            + "\"timestamp\": \"" + now().format(DateTimeFormatter.ISO_DATE_TIME) + "\""
+            + "}");
   }
 
   private static String claimValueToString(Object value) {

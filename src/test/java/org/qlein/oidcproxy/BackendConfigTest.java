@@ -28,7 +28,7 @@ class BackendConfigTest {
     );
     assertEquals(
         """
-            {"realmUrl":"https://account.localhost/auth/realms/realmname","headerPrefix":null,"pathPrefix":"/api/admin","backendHost":"localhost","backendPort":8080,"headerFilter":{"Host":"api.localhost"},"claimFilter":[{"key":"group","value":"admin","type":"string_contains"}]}""",
+            {"realmUrl":"https://account.localhost/auth/realms/realmname","realmInternalUrl":null,"headerPrefix":null,"pathPrefix":"/api/admin","backendHost":"localhost","backendPort":8080,"headerFilter":{"Host":"api.localhost"},"claimFilter":[{"key":"group","value":"admin","type":"string_contains"}]}""",
         json
     );
   }

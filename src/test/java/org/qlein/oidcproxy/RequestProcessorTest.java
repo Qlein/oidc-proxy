@@ -3,6 +3,7 @@ package org.qlein.oidcproxy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.oauth2.sdk.GeneralException;
@@ -37,6 +38,7 @@ class RequestProcessorTest {
 
     response = Mockito.mock(HttpServerResponse.class);
     Mockito.when(response.setStatusCode(anyInt())).thenReturn(response);
+    Mockito.when(response.putHeader(anyString(), anyString())).thenReturn(response);
 
     proxy = Mockito.mock(HttpProxy.class);
 
