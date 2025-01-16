@@ -1,6 +1,7 @@
 package org.qlein.oidcproxy;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.jwk.source.JWKSource;
@@ -42,7 +43,6 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
 import java.net.URL;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,14 +55,12 @@ import net.minidev.json.JSONObject;
 
 public class MainVerticle extends AbstractVerticle {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
+
   protected static final int SLEEP_DURATION = 1900;
   protected static final String LABEL_BACKEND_ID = "backendId";
   private static final String LABEL_TYPE = "type";
   private static final String CONFIG_MAP_TYPE_OIDC = "backendOidc";
-  protected static final Comparator<BackendConfig> BACKEND_CONFIG_COMPARATOR =
-      (config1, config2) ->
-          -config1.getPathPrefix().compareTo(config2.getPathPrefix());
-  private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
 
   public static final String BEARER_PREFIX = "Bearer ";
   public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
@@ -77,7 +75,10 @@ public class MainVerticle extends AbstractVerticle {
 
   private KubernetesClient kubernetesClient;
   private HttpServer httpServer;
-  private JsonMapper jsonMapper = JsonMapper.builder().build();
+  private JsonMapper jsonMapper = JsonMapper
+      .builder()
+      .enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
+      .build();
 
   private boolean checkConfigMapLabels(ConfigMap configMap) {
     Map<String, String> labels = configMap.getMetadata().getLabels();
@@ -220,7 +221,6 @@ public class MainVerticle extends AbstractVerticle {
             List<BackendConfig> matchingBackends = backendConfigs
                 .stream()
                 .filter(backendConfig -> matchRequest(req, backendConfig))
-                .sorted(BACKEND_CONFIG_COMPARATOR)
                 .toList();
             if (matchingBackends.isEmpty()) {
               RequestProcessor.sendUnauthorized(req, response, "Unknown instance");
@@ -253,7 +253,7 @@ public class MainVerticle extends AbstractVerticle {
         req.path(),
         backendConfig.getPathPrefix()
     );
-    boolean pathMatches = req.path().startsWith(backendConfig.getPathPrefix());
+    boolean pathMatches = backendConfig.matchesPath(req.path());
 
     boolean headersMatch = true;
     if (backendConfig.getHeaderFilter() != null && !backendConfig.getHeaderFilter().isEmpty()) {

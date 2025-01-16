@@ -7,13 +7,14 @@ import io.vertx.httpproxy.HttpProxy;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class BackendConfig {
 
   private String realmUrl;
   private String realmInternalUrl;
   private String headerPrefix;
-  private String pathPrefix;
+  private Set<String> pathPrefix;
   private String backendHost;
   private int backendPort;
   private Map<String, String> headerFilter;
@@ -46,11 +47,11 @@ public class BackendConfig {
     return this;
   }
 
-  public String getPathPrefix() {
+  public Set<String> getPathPrefix() {
     return pathPrefix;
   }
 
-  public BackendConfig setPathPrefix(String pathPrefix) {
+  public BackendConfig setPathPrefix(Set<String> pathPrefix) {
     this.pathPrefix = pathPrefix;
     return this;
   }
@@ -160,5 +161,15 @@ public class BackendConfig {
   public BackendConfig setRealmInternalUrl(String realmInternalUrl) {
     this.realmInternalUrl = realmInternalUrl;
     return this;
+  }
+
+  @JsonIgnore
+  public boolean matchesPath(String path) {
+    for (String prefix : pathPrefix) {
+      if (path.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

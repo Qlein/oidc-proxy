@@ -14,6 +14,7 @@ import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class RequestProcessorTest {
             "Host", "api.localhost"
         ))
         .setBackendHost("localhost")
-        .setPathPrefix("/api")
+        .setPathPrefix(Set.of("/api"))
         .setBackendPort(8080)
         .setRealmUrl(OidcProviderMock.getRealmUrl())
         .setClaimFilter(List.of(
