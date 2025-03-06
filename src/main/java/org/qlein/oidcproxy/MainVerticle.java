@@ -10,6 +10,7 @@ import com.nimbusds.jose.proc.DefaultJOSEObjectTypeVerifier;
 import com.nimbusds.jose.proc.JWSKeySelector;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
@@ -23,6 +24,7 @@ import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import io.netty.util.internal.StringUtil;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
@@ -42,6 +44,9 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.Proxy.Type;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.List;
@@ -411,7 +416,34 @@ public class MainVerticle extends AbstractVerticle {
     DefaultJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
 
     jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(JOSEObjectType.JWT));
-    JWKSource<SecurityContext> keySource = new RemoteJWKSet<>(opMetadata.getJWKSetURI().toURL());
+
+    DefaultResourceRetriever jwkSetRetriever = new DefaultResourceRetriever(
+        RemoteJWKSet.resolveDefaultHTTPConnectTimeout(),
+        RemoteJWKSet.resolveDefaultHTTPReadTimeout(),
+        RemoteJWKSet.resolveDefaultHTTPSizeLimit()
+    );
+    //TODO refactor proxy parameter resolution
+    String proxy = System.getProperty(
+        "http_proxy",
+        null
+    );
+    if (!StringUtil.isNullOrEmpty(proxy)) {
+      String[] proxyParts = proxy.split(":");
+      jwkSetRetriever.setProxy(
+          new Proxy(
+              Type.HTTP,
+              InetSocketAddress.createUnresolved(
+                  proxyParts[0],
+                  Integer.parseInt(proxyParts[1])
+              )
+          )
+      );
+    }
+
+    JWKSource<SecurityContext> keySource = new RemoteJWKSet<>(
+        opMetadata.getJWKSetURI().toURL(),
+        jwkSetRetriever
+    );
 
     JWSKeySelector<SecurityContext> keySelector = new JWSVerificationKeySelector<>(
         new HashSet<>(opMetadata.getIDTokenJWSAlgs()),
