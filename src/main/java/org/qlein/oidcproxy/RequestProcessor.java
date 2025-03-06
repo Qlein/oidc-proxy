@@ -61,11 +61,12 @@ public class RequestProcessor {
 
     } catch (Exception e) {
       LOGGER.error(
-          "Processing request [{}] failed with backend [{}:{}] and realm url [{}], cause: {} - {}",
+          "Processing request [{}] failed with backend [{}:{}] and realm url [{}:{}], cause: {} - {}",
           req.path(),
           backend.getBackendHost(),
           backend.getBackendPort(),
           backend.getRealmUrl(),
+          backend.getRealmInternalUrl(),
           e.getClass().getName(),
           e.getMessage(),
           e);
