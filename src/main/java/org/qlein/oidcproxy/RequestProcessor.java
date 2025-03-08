@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.proc.BadJWTException;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.logging.Logger;
@@ -46,12 +47,12 @@ public class RequestProcessor {
         req
             .headers()
             .add(
-                headerPrefix
-                    + claim.getKey(),
+                headerPrefix + claim.getKey(),
                 claimValueToString(claim.getValue()
-                ));
+                )
+            );
       }
-      LOGGER.debug(
+      LOGGER.trace(
           "Sending [{}] request to backend [{}:{}]",
           req.path(),
           backend.getBackendHost(),
@@ -59,6 +60,8 @@ public class RequestProcessor {
       );
       backend.getProxy().handle(req);
 
+    } catch (BadJWTException e) {
+      sendUnauthorized(req, response, e.getMessage());
     } catch (Exception e) {
       LOGGER.error(
           "Processing request [{}] failed with backend [{}:{}] and realm url [{}:{}], cause: {} - {}",
@@ -121,7 +124,13 @@ public class RequestProcessor {
   }
 
   static void sendUnauthorized(HttpServerRequest req, HttpServerResponse response, String error) {
-    LOGGER.error("Authorization error: {}", error);
+    LOGGER.error(
+        "Request {} {} from {} authorization error: {}",
+        req.method(),
+        req.path(),
+        req.getHeader("X-Real-IP"),
+        error
+    );
     response
         .putHeader("Content", "application/json")
         .setStatusCode(401)
