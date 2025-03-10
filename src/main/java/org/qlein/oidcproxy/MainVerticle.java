@@ -217,23 +217,23 @@ public class MainVerticle extends AbstractVerticle {
             RequestProcessor.sendUnauthorized(req, response, "Bearer missing");
           } else {
             final String accessToken = authorizationHeaderValue.substring(BEARER_PREFIX.length());
-            if (LOGGER.isTraceEnabled()) {
-              LOGGER.trace("Token: {}", accessToken);
+            LOGGER.trace("Token: {}", accessToken);
+            BackendConfig matchingBackend = null;
+            for (BackendConfig config : backendConfigs) {
+              if (matchRequest(req, config)) {
+                matchingBackend = config;
+                break;
+              }
             }
-            List<BackendConfig> matchingBackends = backendConfigs
-                .stream()
-                .filter(backendConfig -> matchRequest(req, backendConfig))
-                .toList();
-            if (matchingBackends.isEmpty()) {
+            if (matchingBackend == null) {
               RequestProcessor.sendUnauthorized(req, response, "Unknown instance");
               return;
             }
-            BackendConfig backendConfig = matchingBackends.get(0);
             LOGGER.trace(
                 "Backend config with path prefix [{}] will be used to process request",
-                backendConfig.getPathPrefix()
+                matchingBackend.getPathPrefix()
             );
-            RequestProcessor.processRequestWithBackend(accessToken, req, response, backendConfig);
+            RequestProcessor.processRequestWithBackend(accessToken, req, response, matchingBackend);
           }
 
         })
