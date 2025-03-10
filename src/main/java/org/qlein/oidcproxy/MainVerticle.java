@@ -16,7 +16,6 @@ import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import com.nimbusds.oauth2.sdk.GeneralException;
 import com.nimbusds.oauth2.sdk.http.HTTPRequest;
-import com.nimbusds.oauth2.sdk.http.HTTPRequestConfigurator;
 import com.nimbusds.oauth2.sdk.http.HTTPResponse;
 import com.nimbusds.oauth2.sdk.id.Issuer;
 import com.nimbusds.oauth2.sdk.util.JSONObjectUtils;
@@ -71,6 +70,7 @@ public class MainVerticle extends AbstractVerticle {
   public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
   public static final int DEFAULT_PROXY_PORT = 8080;
   public static final String OIDC_PROXY_PORT = "OIDC_PROXY_PORT";
+  private static Proxy proxy;
 
   private int proxyPort;
 
@@ -101,6 +101,21 @@ public class MainVerticle extends AbstractVerticle {
   @Override
   public void init(Vertx vertx, Context context) {
     super.init(vertx, context);
+    //TODO refactor proxy parameter resolution
+    String proxyStr = System.getProperty(
+        "http_proxy",
+        null
+    );
+    if (!StringUtil.isNullOrEmpty(proxyStr)) {
+      String[] proxyParts = proxyStr.split(":");
+      proxy = new Proxy(
+          Type.HTTP,
+          InetSocketAddress.createUnresolved(
+              proxyParts[0],
+              Integer.parseInt(proxyParts[1])
+          )
+      );
+    }
 
     initKubernetesClient();
 
@@ -361,10 +376,10 @@ public class MainVerticle extends AbstractVerticle {
   public static OIDCProviderMetadata resolve(final BackendConfig backendConfig)
       throws GeneralException, IOException {
 
-    HTTPRequestConfigurator requestConfigurator = httpRequest -> {
-      httpRequest.setConnectTimeout(20000);
-      httpRequest.setReadTimeout(20000);
-    };
+//    HTTPRequestConfigurator requestConfigurator = httpRequest -> {
+//      httpRequest.setConnectTimeout(20000);
+//      httpRequest.setReadTimeout(20000);
+//    };
 
     Issuer issuer = new Issuer(
         Optional
@@ -375,7 +390,12 @@ public class MainVerticle extends AbstractVerticle {
     URL configURL = OIDCProviderMetadata.resolveURL(issuer);
 
     HTTPRequest httpRequest = new HTTPRequest(HTTPRequest.Method.GET, configURL);
-    requestConfigurator.configure(httpRequest);
+    httpRequest.setConnectTimeout(20000);
+    httpRequest.setReadTimeout(20000);
+    if (proxy != null) {
+      httpRequest.setProxy(proxy);
+    }
+    //requestConfigurator.configure(httpRequest);
 
     HTTPResponse httpResponse = httpRequest.send();
 
@@ -422,22 +442,8 @@ public class MainVerticle extends AbstractVerticle {
         RemoteJWKSet.resolveDefaultHTTPReadTimeout(),
         RemoteJWKSet.resolveDefaultHTTPSizeLimit()
     );
-    //TODO refactor proxy parameter resolution
-    String proxy = System.getProperty(
-        "http_proxy",
-        null
-    );
-    if (!StringUtil.isNullOrEmpty(proxy)) {
-      String[] proxyParts = proxy.split(":");
-      jwkSetRetriever.setProxy(
-          new Proxy(
-              Type.HTTP,
-              InetSocketAddress.createUnresolved(
-                  proxyParts[0],
-                  Integer.parseInt(proxyParts[1])
-              )
-          )
-      );
+    if (proxy != null) {
+      jwkSetRetriever.setProxy(proxy);
     }
 
     JWKSource<SecurityContext> keySource = new RemoteJWKSet<>(
