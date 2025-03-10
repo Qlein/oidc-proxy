@@ -23,7 +23,6 @@ import com.nimbusds.openid.connect.sdk.op.OIDCProviderMetadata;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
-import io.netty.util.internal.StringUtil;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
@@ -41,11 +40,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.core.tracing.TracingPolicy;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.Proxy.Type;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.List;
@@ -70,7 +67,6 @@ public class MainVerticle extends AbstractVerticle {
   public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
   public static final int DEFAULT_PROXY_PORT = 8080;
   public static final String OIDC_PROXY_PORT = "OIDC_PROXY_PORT";
-  private static Proxy proxy;
 
   private int proxyPort;
 
@@ -101,21 +97,6 @@ public class MainVerticle extends AbstractVerticle {
   @Override
   public void init(Vertx vertx, Context context) {
     super.init(vertx, context);
-    //TODO refactor proxy parameter resolution
-    String proxyStr = System.getProperty(
-        "http_proxy",
-        null
-    );
-    if (!StringUtil.isNullOrEmpty(proxyStr)) {
-      String[] proxyParts = proxyStr.split(":");
-      proxy = new Proxy(
-          Type.HTTP,
-          InetSocketAddress.createUnresolved(
-              proxyParts[0],
-              Integer.parseInt(proxyParts[1])
-          )
-      );
-    }
 
     initKubernetesClient();
 
@@ -135,6 +116,7 @@ public class MainVerticle extends AbstractVerticle {
     client = vertx.createHttpClient(
         new HttpClientOptions()
             .setMaxInitialLineLength(10000)
+            .setTracingPolicy(TracingPolicy.PROPAGATE)
             .setLogActivity(true)
     );
   }
@@ -392,8 +374,8 @@ public class MainVerticle extends AbstractVerticle {
     HTTPRequest httpRequest = new HTTPRequest(HTTPRequest.Method.GET, configURL);
     httpRequest.setConnectTimeout(20000);
     httpRequest.setReadTimeout(20000);
-    if (proxy != null) {
-      httpRequest.setProxy(proxy);
+    if (HttpProxyProvider.isHttpProxyConfigured()) {
+      httpRequest.setProxy(HttpProxyProvider.getHttpProxy());
     }
     //requestConfigurator.configure(httpRequest);
 
@@ -442,8 +424,8 @@ public class MainVerticle extends AbstractVerticle {
         RemoteJWKSet.resolveDefaultHTTPReadTimeout(),
         RemoteJWKSet.resolveDefaultHTTPSizeLimit()
     );
-    if (proxy != null) {
-      jwkSetRetriever.setProxy(proxy);
+    if (HttpProxyProvider.isHttpProxyConfigured()) {
+      jwkSetRetriever.setProxy(HttpProxyProvider.getHttpProxy());
     }
 
     JWKSource<SecurityContext> keySource = new RemoteJWKSet<>(
