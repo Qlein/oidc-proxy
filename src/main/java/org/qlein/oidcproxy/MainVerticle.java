@@ -67,6 +67,7 @@ public class MainVerticle extends AbstractVerticle {
   public static final String DEFAULT_HEADER_PREFIX = "X-auth-";
   public static final int DEFAULT_PROXY_PORT = 8080;
   public static final String OIDC_PROXY_PORT = "OIDC_PROXY_PORT";
+  private static final int OIDC_HTTP_TIMEOUT_MS = 20000;
 
   private int proxyPort;
 
@@ -372,8 +373,8 @@ public class MainVerticle extends AbstractVerticle {
     URL configURL = OIDCProviderMetadata.resolveURL(issuer);
 
     HTTPRequest httpRequest = new HTTPRequest(HTTPRequest.Method.GET, configURL);
-    httpRequest.setConnectTimeout(20000);
-    httpRequest.setReadTimeout(20000);
+    httpRequest.setConnectTimeout(OIDC_HTTP_TIMEOUT_MS);
+    httpRequest.setReadTimeout(OIDC_HTTP_TIMEOUT_MS);
     if (HttpProxyProvider.isHttpProxyConfigured()) {
       httpRequest.setProxy(HttpProxyProvider.getHttpProxy());
     }
@@ -420,8 +421,8 @@ public class MainVerticle extends AbstractVerticle {
     jwtProcessor.setJWSTypeVerifier(new DefaultJOSEObjectTypeVerifier<>(JOSEObjectType.JWT));
 
     DefaultResourceRetriever jwkSetRetriever = new DefaultResourceRetriever(
-        RemoteJWKSet.resolveDefaultHTTPConnectTimeout(),
-        RemoteJWKSet.resolveDefaultHTTPReadTimeout(),
+        OIDC_HTTP_TIMEOUT_MS,
+        OIDC_HTTP_TIMEOUT_MS,
         RemoteJWKSet.resolveDefaultHTTPSizeLimit()
     );
     if (HttpProxyProvider.isHttpProxyConfigured()) {
