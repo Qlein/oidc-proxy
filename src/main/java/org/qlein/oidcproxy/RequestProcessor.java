@@ -43,10 +43,22 @@ public class RequestProcessor {
       String headerPrefix = Optional
           .ofNullable(backend.getHeaderPrefix())
           .orElse(MainVerticle.DEFAULT_HEADER_PREFIX);
+      req.headers()
+          .names()
+          .stream()
+          .filter(headerName -> headerName.regionMatches(
+              true,
+              0,
+              headerPrefix,
+              0,
+              headerPrefix.length()
+          ))
+          .toList()
+          .forEach(headerName -> req.headers().remove(headerName));
       for (Entry<String, Object> claim : claimsSet.getClaims().entrySet()) {
         req
             .headers()
-            .add(
+            .set(
                 headerPrefix + claim.getKey(),
                 claimValueToString(claim.getValue()
                 )

@@ -75,6 +75,22 @@ class RequestProcessorTest {
   }
 
   @Test
+  void testProcessRequestRemovesSpoofedClaimHeaders() throws JOSEException {
+    headers.add("x-AUTH-sub", "attacker");
+    String accessToken = OidcProviderMock.getAccessToken(USER_ID, List.of("/group1", "/group2"));
+
+    RequestProcessor.processRequestWithBackend(
+        accessToken,
+        request,
+        response,
+        backendConfig
+    );
+
+    assertEquals(List.of(USER_ID), headers.getAll("X-auth-sub"));
+    Mockito.verify(proxy, Mockito.times(1)).handle(request);
+  }
+
+  @Test
   void testRejectRequestWithWrongGroup() throws JOSEException {
     String accessToken = OidcProviderMock.getAccessToken(USER_ID, List.of("/group0"));
 
