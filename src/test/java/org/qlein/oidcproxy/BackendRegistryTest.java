@@ -93,7 +93,7 @@ class BackendRegistryTest {
     registry.addOrUpdateBackend(backendConfig("backend-a", "api"));
     registry.addOrUpdateBackend(backendConfig("backend-b", "api"));
 
-    registry.removeBackendsMissingFrom(Set.of("backend-a"));
+    registry.removeBackendsMissingFrom(Set.of(new BackendKey("backend-a", "api")));
 
     assertEquals(1, registry.getBackendConfigs().size());
     assertEquals("backend-a", registry.getBackendConfigs().get(0).getBackendId());

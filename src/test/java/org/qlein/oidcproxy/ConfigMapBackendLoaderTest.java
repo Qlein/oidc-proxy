@@ -38,9 +38,10 @@ class ConfigMapBackendLoaderTest {
         .addToData("admin", backendJson("/admin", 9091))
         .build();
 
-    String backendId = loader.addConfigMap(configMap);
+    Set<BackendKey> backendKeys = loader.addConfigMap(configMap);
 
-    assertEquals("backend-a", backendId);
+    assertEquals(Set.of(new BackendKey("backend-a", "api"), new BackendKey("backend-a", "admin")),
+        backendKeys);
     assertEquals(2, registry.getBackendConfigs().size());
     assertEquals(
         Set.of("api", "admin"),
@@ -56,6 +57,33 @@ class ConfigMapBackendLoaderTest {
   }
 
   @Test
+  void removedConfigMapDataEntryRemovesOnlyMatchingBackendConfig() {
+    ConfigMap initialConfigMap = new ConfigMapBuilder()
+        .withNewMetadata()
+        .withName("backend-config")
+        .addToLabels("backendId", "backend-a")
+        .addToLabels("type", "backendOidc")
+        .endMetadata()
+        .addToData("api", backendJson("/api", 9090))
+        .addToData("admin", backendJson("/admin", 9091))
+        .build();
+    loader.addConfigMap(initialConfigMap);
+
+    ConfigMap updatedConfigMap = new ConfigMapBuilder()
+        .withNewMetadata()
+        .withName("backend-config")
+        .addToLabels("backendId", "backend-a")
+        .addToLabels("type", "backendOidc")
+        .endMetadata()
+        .addToData("api", backendJson("/api", 9090))
+        .build();
+    registry.removeBackendsMissingFrom(loader.addConfigMap(updatedConfigMap));
+
+    assertEquals(1, registry.getBackendConfigs().size());
+    assertEquals("api", registry.getBackendConfigs().get(0).getConfigMapField());
+  }
+
+  @Test
   void checkConfigMapLabelsOnlyAcceptsBackendOidcMapsWithBackendId() {
     ConfigMap matchingConfigMap = configMapWithLabels(Map.of(
         "backendId", "backend-a",
@@ -66,10 +94,30 @@ class ConfigMapBackendLoaderTest {
         "type", "other"
     ));
     ConfigMap missingBackendConfigMap = configMapWithLabels(Map.of("type", "backendOidc"));
+    ConfigMap unlabeledConfigMap = new ConfigMapBuilder()
+        .withNewMetadata()
+        .withName("backend-config")
+        .endMetadata()
+        .build();
 
     assertTrue(loader.checkConfigMapLabels(matchingConfigMap));
     assertFalse(loader.checkConfigMapLabels(wrongTypeConfigMap));
     assertFalse(loader.checkConfigMapLabels(missingBackendConfigMap));
+    assertFalse(loader.checkConfigMapLabels(unlabeledConfigMap));
+  }
+
+  @Test
+  void addConfigMapIgnoresMissingData() {
+    ConfigMap configMap = new ConfigMapBuilder()
+        .withNewMetadata()
+        .withName("backend-config")
+        .addToLabels("backendId", "backend-a")
+        .addToLabels("type", "backendOidc")
+        .endMetadata()
+        .build();
+
+    assertTrue(loader.addConfigMap(configMap).isEmpty());
+    assertTrue(registry.getBackendConfigs().isEmpty());
   }
 
   private String backendJson(String pathPrefix, int backendPort) {

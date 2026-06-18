@@ -79,10 +79,10 @@ class BackendRegistry {
     }
   }
 
-  void removeBackendsMissingFrom(Set<String> foundBackends) {
+  void removeBackendsMissingFrom(Set<BackendKey> foundBackends) {
     backendConfigs
         .stream()
-        .filter(backendConfig -> !foundBackends.contains(backendConfig.getBackendId()))
+        .filter(backendConfig -> !foundBackends.contains(BackendKey.from(backendConfig)))
         .collect(Collectors.toSet())
         .forEach(this::removeBackend);
   }

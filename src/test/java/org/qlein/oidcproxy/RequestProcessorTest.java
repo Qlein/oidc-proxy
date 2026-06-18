@@ -9,6 +9,7 @@ import com.nimbusds.jose.JOSEException;
 import com.nimbusds.oauth2.sdk.GeneralException;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.http.impl.headers.HeadersMultiMap;
 import io.vertx.httpproxy.HttpProxy;
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 class RequestProcessorTest {
@@ -108,5 +110,22 @@ class RequestProcessorTest {
     assertTrue(RequestProcessor.isSimpleType(""));
     assertTrue(RequestProcessor.isSimpleType(10));
     assertTrue(RequestProcessor.isSimpleType(true));
+  }
+
+  @Test
+  void sendUnauthorizedUsesContentTypeAndEscapedJsonBody() {
+    Mockito.when(request.path()).thenReturn("/api/\"orders\"");
+    ArgumentCaptor<String> bodyCaptor = ArgumentCaptor.forClass(String.class);
+
+    RequestProcessor.sendUnauthorized(request, response, "Auth header missing");
+
+    Mockito.verify(response).putHeader("Content-Type", "application/json");
+    Mockito.verify(response).setStatusCode(401);
+    Mockito.verify(response).send(bodyCaptor.capture());
+
+    JsonObject body = new JsonObject(bodyCaptor.getValue());
+    assertEquals("invalid token", body.getString("message"));
+    assertEquals("/api/\"orders\"", body.getString("endpoint"));
+    assertTrue(body.containsKey("timestamp"));
   }
 }

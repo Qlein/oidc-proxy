@@ -9,6 +9,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.proc.BadJWTException;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import java.time.format.DateTimeFormatter;
@@ -144,13 +145,13 @@ public class RequestProcessor {
         error
     );
     response
-        .putHeader("Content", "application/json")
+        .putHeader("Content-Type", "application/json")
         .setStatusCode(401)
-        .send("{"
-            + "\"message\": \"invalid token\","
-            + "\"endpoint\": \"" + req.path() + "\","
-            + "\"timestamp\": \"" + now().format(DateTimeFormatter.ISO_DATE_TIME) + "\""
-            + "}");
+        .send(new JsonObject()
+            .put("message", "invalid token")
+            .put("endpoint", req.path())
+            .put("timestamp", now().format(DateTimeFormatter.ISO_DATE_TIME))
+            .encode());
   }
 
   private static String claimValueToString(Object value) {
