@@ -9,6 +9,7 @@ import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Context;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
@@ -34,9 +35,11 @@ public class MainVerticle extends AbstractVerticle {
 
   private ConfigRetriever myConfigRetriver;
   private KubernetesClient kubernetesClient;
+  private HttpClient httpClient;
   private HttpServer httpServer;
   private BackendRegistry backendRegistry;
   private ConfigMapBackendLoader configMapBackendLoader;
+  private Long backendRefreshTimerId;
 
   @Override
   public void init(Vertx vertx, Context context) {
@@ -67,13 +70,13 @@ public class MainVerticle extends AbstractVerticle {
   }
 
   private void initBackendRegistry(Vertx vertx) {
-    HttpClient client = vertx.createHttpClient(
+    httpClient = vertx.createHttpClient(
         new HttpClientOptions()
             .setMaxInitialLineLength(10000)
             .setTracingPolicy(TracingPolicy.PROPAGATE)
             .setLogActivity(true)
     );
-    backendRegistry = new BackendRegistry(new HttpProxyBackendInitializer(client));
+    backendRegistry = new BackendRegistry(new HttpProxyBackendInitializer(httpClient));
     configMapBackendLoader = new ConfigMapBackendLoader(backendRegistry);
   }
 
@@ -87,9 +90,45 @@ public class MainVerticle extends AbstractVerticle {
             return;
           }
           initProxy(startPromise);
-          vertx.setPeriodic(1000L, 10000L, this::loadBackends);
+          backendRefreshTimerId = vertx.setPeriodic(1000L, 10000L, this::loadBackends);
         })
         .onFailure(e -> startPromise.fail("Can't load config: " + e.getMessage()));
+  }
+
+  @Override
+  public void stop(Promise<Void> stopPromise) {
+    LOGGER.info("Stopping oidc-proxy");
+
+    if (backendRefreshTimerId != null) {
+      vertx.cancelTimer(backendRefreshTimerId);
+      backendRefreshTimerId = null;
+    }
+
+    if (myConfigRetriver != null) {
+      myConfigRetriver.close();
+    }
+
+    Future<Void> httpServerClose = httpServer != null
+        ? httpServer.close()
+        : Future.succeededFuture();
+    Future<Void> httpClientClose = httpClient != null
+        ? httpClient.close()
+        : Future.succeededFuture();
+
+    Future
+        .all(httpServerClose, httpClientClose)
+        .onComplete(closeResult -> {
+          if (kubernetesClient != null) {
+            kubernetesClient.close();
+          }
+
+          if (closeResult.succeeded()) {
+            LOGGER.info("oidc-proxy stopped");
+            stopPromise.complete();
+          } else {
+            stopPromise.fail(closeResult.cause());
+          }
+        });
   }
 
   private void loadBackends(Long timerId) {

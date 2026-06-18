@@ -19,4 +19,4 @@ ENV JAVA_OPTS "-Xmx16m"
 ENV OIDC_PROXY_PORT 18080
 
 
-ENTRYPOINT java $JAVA_OPTS -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory -Djava.security.egd=file:/dev/./urandom -jar /app/application.jar
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory -Djava.security.egd=file:/dev/./urandom -jar /app/application.jar"]
